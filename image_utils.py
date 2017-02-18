@@ -1,6 +1,9 @@
 import numpy as np
 import cv2
 
+def read_image_as_rgb(file_path):
+    return cv2.cvtColor(cv2.imread(file_path), cv2.COLOR_BGR2RGB)
+
 def normalize(sobel):
     sobel = np.absolute(sobel)
     return (sobel * 255. / sobel.max()).astype(np.uint8)
@@ -53,8 +56,8 @@ def trapezoidal_crop(gray_img):
     H, W = gray_img.shape[:2]
     trapezoidal_aoi = np.array([[
         (40, H),
-        (W / 2 - 40, H / 2 + 80),
-        (W / 2 + 40, H / 2 + 80),
+        (W / 2 - 40, H / 2 + 60),
+        (W / 2 + 40, H / 2 + 60),
         (W - 40, H)]], dtype=np.int32)
 
     mask = np.zeros_like(gray_img, dtype=np.int32)

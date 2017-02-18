@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import glob
-import utils
 from camera_calibration import CameraCalibrator
 from perspective_transform import BirdsEyeViewTransform
 from image_utils import *
@@ -15,13 +14,14 @@ class LaneDetectionPipeline:
         undist = self.camera_calibrator.undistort(img)
         gray = custom_gray_transform(undist)
         crop = trapezoidal_crop(gray)
+        birds_eye_view = self.BIRDS_EYE_TRANSFORM.get_birds_eye_view(crop)
 
-        return crop
+        return birds_eye_view
 
 # debug code
 def main():
     test_img_files = glob.glob("test_images/*.jpg")
-    test_images = [utils.read_image_as_rgb(f) for f in test_img_files]
+    test_images = [read_image_as_rgb(f) for f in test_img_files]
     cameraCalibrator = CameraCalibrator()
     cameraCalibrator.restore('models/camera_calibration_model')
     pipeline = LaneDetectionPipeline(cameraCalibrator)

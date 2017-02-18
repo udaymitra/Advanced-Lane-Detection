@@ -2,8 +2,8 @@ import numpy as np
 import cv2
 
 class BirdsEyeViewTransform:
-    SRC_COORDS=np.float32([(190,720),(1130,720),(725,460),(570,460)])
-    DEST_COORDS=np.float32([(265,720),(1130,720),(1130,0),(265,0)])
+    SRC_COORDS=np.float32([(190,720),(1130,720),(705,460),(575,460)])
+    DEST_COORDS=np.float32([(225,720),(1100,720),(1100,0),(225,0)])
     M = cv2.getPerspectiveTransform(SRC_COORDS, DEST_COORDS)
     Minv = cv2.getPerspectiveTransform(DEST_COORDS, SRC_COORDS)
 
