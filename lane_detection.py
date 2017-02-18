@@ -66,15 +66,6 @@ def trapezoidal_crop(gray_img):
     cv2.fillPoly(mask, trapezoidal_aoi, 1)
     return np.uint8(gray_img & mask)
 
-class LaneDetectionPipeline:
-    def __init__(self, camera_calibrator):
-        self.camera_calibrator = camera_calibrator
-
-    def process(self, img):
-        undist = cameraCalibrator.undistort(img)
-        gray = custom_gray_transform(undist)
-        return gray
-
 class BirdsEyeViewTransform:
     SRC_COORDS=np.float32([(190,720),(1130,720),(725,460),(570,460)])
     DEST_COORDS=np.float32([(265,720),(1130,720),(1130,0),(265,0)])
@@ -84,38 +75,57 @@ class BirdsEyeViewTransform:
     def get_birds_eye_view(self, gray):
         return cv2.warpPerspective(gray, self.M, (gray.shape[1], gray.shape[0]), flags=cv2.INTER_LINEAR)
 
-test_img_files = glob.glob("test_images/*.jpg")
-test_images = [utils.read_image_as_rgb(f) for f in test_img_files]
-cameraCalibrator = CameraCalibrator()
-cameraCalibrator.restore('models/camera_calibration_model')
-pipeline = LaneDetectionPipeline(cameraCalibrator)
+    def get_original_view(self, birds_eye_view):
+        return cv2.warpPerspective(birds_eye_view, self.Minv, (birds_eye_view.shape[1], birds_eye_view.shape[0]),
+                                   flags=cv2.INTER_LINEAR)
+
+class LaneDetectionPipeline:
+    BIRDS_EYE_TRANSFORM = BirdsEyeViewTransform()
+
+    def __init__(self, camera_calibrator):
+        self.camera_calibrator = camera_calibrator
+
+    def process(self, img):
+        undist = self.camera_calibrator.undistort(img)
+        gray = custom_gray_transform(undist)
+        crop = trapezoidal_crop(gray)
+
+        return crop
+
+# debug code
+def main():
+    test_img_files = glob.glob("test_images/*.jpg")
+    test_images = [utils.read_image_as_rgb(f) for f in test_img_files]
+    cameraCalibrator = CameraCalibrator()
+    cameraCalibrator.restore('models/camera_calibration_model')
+    pipeline = LaneDetectionPipeline(cameraCalibrator)
 
 
-img = test_images[0]
-undistorted = pipeline.process(img)
-bet = BirdsEyeViewTransform()
-birds_eye_undistorted = bet.get_birds_eye_view(undistorted)
-crop = trapezoidal_crop(undistorted)
-birds_eye_crop = bet.get_birds_eye_view(crop)
+    img = test_images[0]
+    undistorted = pipeline.process(img)
+    bet = BirdsEyeViewTransform()
+    birds_eye_undistorted = bet.get_birds_eye_view(undistorted)
+    crop = trapezoidal_crop(undistorted)
+    birds_eye_crop = bet.get_birds_eye_view(crop)
 
-# fig, ax = plt.subplots(2, 2)
-# ax[0][0].imshow(undistorted, cmap='gray')
-# ax[0][0].set_title("hls and gradient transform")
-# ax[0][0].axis("off")
-# ax[0][1].imshow(birds_eye_undistorted, cmap='gray')
-# ax[0][1].set_title("birds eye")
-# ax[0][1].axis("off")
+    # fig, ax = plt.subplots(2, 2)
+    # ax[0][0].imshow(undistorted, cmap='gray')
+    # ax[0][0].set_title("hls and gradient transform")
+    # ax[0][0].axis("off")
+    # ax[0][1].imshow(birds_eye_undistorted, cmap='gray')
+    # ax[0][1].set_title("birds eye")
+    # ax[0][1].axis("off")
 
-# ax[1][0].imshow(crop, cmap='gray')
-# ax[1][0].title("trapeziodal crop")
-# ax[1][0].axis("off")
-# ax[1][1].imshow(birds_eye_crop, cmap='gray')
-# ax[1][1].title("birds eye crop")
-# ax[1][1].axis("off")
+    # ax[1][0].imshow(crop, cmap='gray')
+    # ax[1][0].title("trapeziodal crop")
+    # ax[1][0].axis("off")
+    # ax[1][1].imshow(birds_eye_crop, cmap='gray')
+    # ax[1][1].title("birds eye crop")
+    # ax[1][1].axis("off")
 
-plt.imshow(birds_eye_crop, cmap='gray')
-plt.title("Cropped image")
-plt.axis("off")
+    histogram = np.sum(birds_eye_crop, axis=0)
+    plt.plot(histogram)
+    plt.show()
 
-plt.grid()
-plt.show()
+if __name__ == "__main__":
+    main()
