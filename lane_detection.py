@@ -3,20 +3,32 @@ import glob
 from camera_calibration import CameraCalibrator
 from perspective_transform import BirdsEyeViewTransform
 from image_utils import *
+from lanes import *
+from lane_finding_histogram import fit_left_and_right_lanes
 
 class LaneDetectionPipeline:
     BIRDS_EYE_TRANSFORM = BirdsEyeViewTransform()
 
     def __init__(self, camera_calibrator):
         self.camera_calibrator = camera_calibrator
+        self.lanes = Lanes()
 
-    def process(self, img):
+    def get_birds_eye_binary(self, img):
         undist = self.camera_calibrator.undistort(img)
         gray = custom_gray_transform(undist)
         crop = trapezoidal_crop(gray)
         birds_eye_view = self.BIRDS_EYE_TRANSFORM.get_birds_eye_view(crop)
 
         return birds_eye_view
+
+    def process(self, img):
+        binary_warped = self.get_birds_eye_binary(img)
+        left_fit, right_fit, _ = fit_left_and_right_lanes(binary_warped, 15, draw_rects=False)
+        self.lanes.add_current_lane_fits(left_fit, right_fit, binary_warped.shape[0], binary_warped.shape[1])
+        return self.lanes.draw_lanes(img, binary_warped)
+
+    def reset(self):
+        self.lanes.reset()
 
 # debug code
 def main():
@@ -27,7 +39,7 @@ def main():
     pipeline = LaneDetectionPipeline(cameraCalibrator)
 
     img = test_images[0]
-    undistorted = pipeline.process(img)
+    undistorted = pipeline.get_birds_eye_binary(img)
     bet = BirdsEyeViewTransform()
     birds_eye_undistorted = bet.get_birds_eye_view(undistorted)
     crop = trapezoidal_crop(undistorted)
