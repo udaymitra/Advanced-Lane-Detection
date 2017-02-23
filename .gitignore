@@ -1,5 +1,5 @@
 .idea
 __pycache__
-camera_cal_plots*
 .ipynb_checkpoints
 .DS_Store
+debug
