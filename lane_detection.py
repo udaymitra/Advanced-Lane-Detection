@@ -23,8 +23,7 @@ class LaneDetectionPipeline:
 
     def process(self, img):
         binary_warped = self.get_birds_eye_binary(img)
-        left_fit, right_fit, _ = fit_left_and_right_lanes(binary_warped, 15, draw_rects=False)
-        self.lanes.add_current_lane_fits(left_fit, right_fit, binary_warped.shape[0], binary_warped.shape[1])
+        self.lanes.add_current_lane_fits(binary_warped)
         return self.lanes.draw_lanes(img, binary_warped)
 
     def reset(self):

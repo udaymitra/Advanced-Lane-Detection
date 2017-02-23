@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 from perspective_transform import BirdsEyeViewTransform
+from lane_finding_histogram import *
 
 # Define conversions in x and y from pixels space to meters
 Y_M_PER_PIX = 30/720 # meters per pixel in y dimension
@@ -20,6 +21,7 @@ class Line():
         self.bestx = None
         #polynomial coefficients averaged over the last n iterations
         self.best_fit = None
+        self.best_fit_meters = None
         #polynomial coefficients for the most recent fit
         self.current_fit = [np.array([False])]
         #radius of curvature of the line in some units
@@ -51,9 +53,10 @@ class Line():
 
         # compute best X
         self.bestx = np.mean(self.recent_xfitted, axis=0)
+        self.best_fit = np.polyfit(self.ally, self.bestx, 2)
 
-        self.best_fit = np.polyfit(self.ally * Y_M_PER_PIX, self.bestx * X_M_PER_PIX, 2)
-        self.radius_of_curvature = ((1 + (2 * self.best_fit[0] * IMG_HEIGHT * Y_M_PER_PIX + self.best_fit[1]) ** 2) ** 1.5) / np.absolute(2 * self.best_fit[0])
+        self.best_fit_meters = np.polyfit(self.ally * Y_M_PER_PIX, self.bestx * X_M_PER_PIX, 2)
+        self.radius_of_curvature = ((1 + (2 * self.best_fit_meters[0] * IMG_HEIGHT * Y_M_PER_PIX + self.best_fit_meters[1]) ** 2) ** 1.5) / np.absolute(2 * self.best_fit_meters[0])
 
     def get_x(self, y):
         return self.current_fit[0] * y ** 2 + self.current_fit[1] * y + self.current_fit[2]
@@ -63,6 +66,7 @@ class Line():
         self.recent_xfitted = []
         self.bestx = None
         self.best_fit = None
+        self.best_fit_meters = None
         self.current_fit = [np.array([False])]
         self.radius_of_curvature = None
 
@@ -71,6 +75,17 @@ class Line():
 
         self.allx = None
         self.ally = np.linspace(0, IMG_HEIGHT - 1, 20)
+
+# get Lane width
+def get_lane_width_stats(left_fit, right_fit, img_height, x_m_per_pix):
+    y = np.linspace(0, img_height - 1, 15)
+    left_x = left_fit[0] * y ** 2 + left_fit[1] * y + left_fit[2]
+    right_x = right_fit[0] * y ** 2 + right_fit[1] * y + right_fit[2]
+
+    lane_widths = (right_x - left_x) * x_m_per_pix
+    lane_width_mean = lane_widths.mean()
+    lane_width_std = lane_widths.std()
+    return (lane_width_mean, lane_width_std)
 
 class Lanes():
     def __init__(self):
@@ -82,26 +97,46 @@ class Lanes():
         self.recent_lane_widths = []
         self.current_lane_width = None
         self.car_meters_off_center = None
-        self.text = ''
+        self.lane_locked = False
+        self.radius_of_curvature = None
 
-    def add_current_lane_fits(self, left_fit, right_fit, img_height, img_width):
-        self.text = ''
+    def is_new_fit_good(self, left_fit, right_fit, img_height):
+        if left_fit is None or right_fit is None:
+            return False
+
+        lane_width_mean, lane_width_std = get_lane_width_stats(left_fit, right_fit, img_height, X_M_PER_PIX)
+        if lane_width_std > 0.1 * lane_width_mean:
+            # print("Error: lane width stddev %f is more than 10%% of lane width %f" % (lane_width_std, lane_width_mean))
+            return False
+
+        if self.recent_lane_widths:
+            recent_lane_width_mean = np.mean(self.recent_lane_widths)
+            if abs(lane_width_mean - recent_lane_width_mean) > 0.1 * recent_lane_width_mean:
+                # print("Error: current lane width %f is far from from mean %f" % (lane_width_mean, recent_lane_width_mean))
+                return False
+
+        return True
+
+    def add_current_lane_fits(self, binary_warped):
+        img_height = binary_warped.shape[0]
+        img_width = binary_warped.shape[1]
+
+        self.lane_locked = False
+        left_fit = None
+        right_fit = None
+
+        if self.left_lane.detected and self.right_lane.detected:
+            left_fit, right_fit = fit_left_and_right_lanes_using_last_frame_info(binary_warped, self.left_lane.best_fit, self.right_lane.best_fit)
+            self.lane_locked = self.is_new_fit_good(left_fit, right_fit, img_height)
+
+        if not self.lane_locked:
+            left_fit, right_fit, _ = fit_left_and_right_lanes(binary_warped, 15, draw_rects=False)
+
         self.left_lane.add_new_lane_info(left_fit)
         self.right_lane.add_new_lane_info(right_fit)
 
         lane_x_diff = (self.right_lane.bestx - self.left_lane.bestx) * X_M_PER_PIX
         self.current_lane_width = lane_x_diff.mean()
-        lane_width_std = lane_x_diff.std()
-        if lane_width_std > 0.1 * self.current_lane_width:
-            self.text += "Error: lane width stddev %f is more than 10%% of lane width %f" % (lane_width_std, self.current_lane_width)
-            print("ERROR 1")
-
-        if self.recent_lane_widths:
-            recent_lane_width_mean = np.mean(self.recent_lane_widths)
-            if abs(self.current_lane_width - recent_lane_width_mean) > 0.1 * recent_lane_width_mean:
-                self.text += "Error: current lane width %f is far from from mean %f" % (self.current_lane_width, recent_lane_width_mean)
-                print("ERROR 2")
-                print(self.text)
 
         # retain the last N lane widths
         if (len(self.recent_lane_widths) < LAST_N):
@@ -117,10 +152,7 @@ class Lanes():
         screen_off_center = screen_middel_pixel - car_middle_pixel
         self.car_meters_off_center = X_M_PER_PIX * screen_off_center
 
-        radius_of_curvature = (self.left_lane.radius_of_curvature + self.right_lane.radius_of_curvature) / 2
-        self.text += "curvature: %d m, %s of center: %.2f" % (int(radius_of_curvature),
-                                                        "left" if self.car_meters_off_center > 0 else "right",
-                                                        np.abs(self.car_meters_off_center))
+        self.radius_of_curvature = (self.left_lane.radius_of_curvature + self.right_lane.radius_of_curvature) / 2
 
     def draw_lanes(self, undist, warped):
         # Create an image to draw the lines on
@@ -147,8 +179,17 @@ class Lanes():
         # Combine the result with the original image
         result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
-        result = cv2.putText(result, self.text, (10, 50), cv2.FONT_HERSHEY_SIMPLEX,
-                               1.5, (255, 255, 0), 2)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        if len(self.recent_lane_widths) > 1:
+            if self.lane_locked:
+                cv2.putText(result, "Lane Locked", (550, 40), font, 1, (0, 255, 0), 2)
+            else:
+                cv2.putText(result, "Lane Lost", (550, 40), font, 1, (255, 0, 0), 2)
+
+        cv2.putText(result, "Radius of Curvature: %d m" % int(self.radius_of_curvature) , (400, 70),
+                    font, 1, (255, 255, 0), 2)
+        cv2.putText(result, "Distance from center: %.2f m" % np.abs(self.car_meters_off_center), (400, 100),
+                    font, 1, (255, 255, 255), 2)
         return result
 
     def reset(self):
@@ -158,4 +199,5 @@ class Lanes():
         self.recent_lane_widths = []
         self.current_lane_width = None
         self.car_meters_off_center = None
-        self.text = ''
+        self.lane_locked = False
+        self.radius_of_curvature = None

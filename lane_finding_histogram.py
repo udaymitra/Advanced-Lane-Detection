@@ -79,31 +79,36 @@ def fit_left_and_right_lanes(binary_warped_img, nwindows = 9, draw_rects=False):
     out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
     return (left_fit, right_fit, out_img)
 
-# def fit_left_and_right_lanes_using_last_frame_info(binary_warped_img, prev_left_fit, pref_right_fit):
-#     nonzero = binary_warped_img.nonzero()
-#     nonzeroy = np.array(nonzero[0])
-#     nonzerox = np.array(nonzero[1])
-#     margin = 100
-#     left_lane_inds = ((nonzerox > (prev_left_fit[0] * (nonzeroy ** 2) + prev_left_fit[1] * nonzeroy + prev_left_fit[2] - margin)) &
-#                       (nonzerox < (prev_left_fit[0] * (nonzeroy ** 2) + prev_left_fit[1] * nonzeroy + prev_left_fit[2] + margin)))
-#     right_lane_inds = ((nonzerox > (pref_right_fit[0] * (nonzeroy ** 2) + pref_right_fit[1] * nonzeroy + pref_right_fit[2] - margin)) &
-#                        (nonzerox < (pref_right_fit[0] * (nonzeroy ** 2) + pref_right_fit[1] * nonzeroy + pref_right_fit[2] + margin)))
-#
-#     # Again, extract left and right line pixel positions
-#     leftx = nonzerox[left_lane_inds]
-#     lefty = nonzeroy[left_lane_inds]
-#     rightx = nonzerox[right_lane_inds]
-#     righty = nonzeroy[right_lane_inds]
-#     # Fit a second order polynomial to each
-#     prev_left_fit = np.polyfit(lefty, leftx, 2)
-#     pref_right_fit = np.polyfit(righty, rightx, 2)
-#     # Generate x and y values for plotting
-#     ploty = np.linspace(0, binary_warped_img.shape[0] - 1, binary_warped_img.shape[0])
-#     left_fitx = prev_left_fit[0] * ploty ** 2 + prev_left_fit[1] * ploty + prev_left_fit[2]
-#     right_fitx = pref_right_fit[0] * ploty ** 2 + pref_right_fit[1] * ploty + pref_right_fit[2]
-#
-#     return
+# Builds left and right lanes by using the lane info from previous frame
+# This code searches for points in the area around the previous lanes
+def fit_left_and_right_lanes_using_last_frame_info(binary_warped_img, prev_left_fit, prev_right_fit):
+    nonzero = binary_warped_img.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    margin = 100
+    left_lane_inds = ((nonzerox > (prev_left_fit[0] * (nonzeroy ** 2) + prev_left_fit[1] * nonzeroy + prev_left_fit[2] - margin)) & (
+    nonzerox < (prev_left_fit[0] * (nonzeroy ** 2) + prev_left_fit[1] * nonzeroy + prev_left_fit[2] + margin)))
+    right_lane_inds = (
+    (nonzerox > (prev_right_fit[0] * (nonzeroy ** 2) + prev_right_fit[1] * nonzeroy + prev_right_fit[2] - margin)) & (
+    nonzerox < (prev_right_fit[0] * (nonzeroy ** 2) + prev_right_fit[1] * nonzeroy + prev_right_fit[2] + margin)))
 
+    # Again, extract left and right line pixel positions
+    leftx = nonzerox[left_lane_inds]
+    lefty = nonzeroy[left_lane_inds]
+    rightx = nonzerox[right_lane_inds]
+    righty = nonzeroy[right_lane_inds]
+
+    left_fit = None
+    right_fit = None
+
+    if leftx.shape[0] > 1 and lefty.shape[0] > 1 and rightx.shape[0] > 1 and righty.shape[0] > 1:
+        # Fit a second order polynomial to each
+        left_fit = np.polyfit(lefty, leftx, 2)
+        right_fit = np.polyfit(righty, rightx, 2)
+
+    return (left_fit, right_fit)
+
+# helper code for plotting results in jupyter notebook
 def plot_left_and_right_lanes(binary_warped, nwindows, sub_plot):
     left_fit, right_fit, out_img = fit_left_and_right_lanes(binary_warped, nwindows, draw_rects=True)
     # Generate x and y values for plotting
